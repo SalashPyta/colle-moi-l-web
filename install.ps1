@@ -27,33 +27,42 @@ foreach ($v in 9,10,11,12) {
 }
 Write-Host "  - Premiere autorise a charger le panneau"
 
-# 3. Helper (raccourci Ctrl+V)
+# 3. Helper (raccourci Ctrl+V) — AutoHotkey PORTABLE, aucune installation requise
 $hd = Join-Path $env:LOCALAPPDATA "ColleMoiWeb"
 New-Item -ItemType Directory -Path $hd -Force | Out-Null
 $startup = [Environment]::GetFolderPath('Startup')
-$exe = Join-Path $src "Windows\ColleMoiWebHelper.exe"
-$ahk = Join-Path $src "Windows\ColleMoiWebHelper.ahk"
-if (Test-Path $exe) {
-  Copy-Item $exe $hd -Force
-  Copy-Item (Join-Path $hd "ColleMoiWebHelper.exe") $startup -Force
-  Start-Process (Join-Path $hd "ColleMoiWebHelper.exe")
-  Write-Host "  - Helper installe et lance"
-} elseif (Test-Path $ahk) {
-  Copy-Item $ahk $hd -Force
-  Copy-Item (Join-Path $hd "ColleMoiWebHelper.ahk") $startup -Force
-  # AutoHotkey v2 est-il installe ? (necessaire pour lancer le .ahk)
-  $ahkInstalled = $false
-  try { if (Get-Command AutoHotkey* -ErrorAction SilentlyContinue) { $ahkInstalled = $true } } catch {}
-  if (-not $ahkInstalled -and (Test-Path "$env:ProgramFiles\AutoHotkey")) { $ahkInstalled = $true }
-  if ($ahkInstalled) {
-    try { Start-Process (Join-Path $hd "ColleMoiWebHelper.ahk"); Write-Host "  - Helper lance ✓" } catch { Write-Host "  - Helper copie (lancement auto echoue, demarrera a la prochaine session)" }
-  } else {
-    Write-Host ""
-    Write-Host "  /!\ Le raccourci Ctrl+V necessite AutoHotkey v2 (gratuit)."
-    Write-Host "      Installe-le ici :  https://www.autohotkey.com/  (choisir la v2)"
-    Write-Host "      Puis relance ce script, ou ouvre :  $hd\ColleMoiWebHelper.ahk"
-    Write-Host "      (Le bouton du panneau dans Premiere fonctionne deja sans ca.)"
+
+# copier le script du helper
+Copy-Item (Join-Path $src "Windows\ColleMoiWebHelper.ahk") $hd -Force
+$ahkScript = Join-Path $hd "ColleMoiWebHelper.ahk"
+
+# récupérer AutoHotkey64.exe (portable) si absent
+$ahkExe = Join-Path $hd "AutoHotkey64.exe"
+if (-not (Test-Path $ahkExe)) {
+  Write-Host "  - Telechargement d'AutoHotkey (portable, sans installation)..."
+  try {
+    $ahkZip = Join-Path $env:TEMP "ahk2.zip"
+    Invoke-WebRequest "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.18/AutoHotkey_2.0.18.zip" -OutFile $ahkZip
+    $ahkTmp = Join-Path $env:TEMP ("ahk2_" + [guid]::NewGuid().ToString())
+    Expand-Archive -Path $ahkZip -DestinationPath $ahkTmp -Force
+    $found = Get-ChildItem -Path $ahkTmp -Recurse -Filter "AutoHotkey64.exe" | Select-Object -First 1
+    if ($found) { Copy-Item $found.FullName $ahkExe -Force }
+    Remove-Item $ahkTmp -Recurse -Force -ErrorAction SilentlyContinue
+  } catch {
+    Write-Host "  /!\ Telechargement AutoHotkey echoue : $_"
   }
+}
+
+if (Test-Path $ahkExe) {
+  # lancer maintenant
+  Start-Process $ahkExe -ArgumentList "`"$ahkScript`""
+  # lancement automatique a chaque ouverture de session (via un .cmd dans Startup)
+  $startupCmd = Join-Path $startup "ColleMoiWeb.cmd"
+  "@start `"`" `"$ahkExe`" `"$ahkScript`"" | Out-File -FilePath $startupCmd -Encoding ASCII
+  Write-Host "  - Helper installe et lance (AutoHotkey portable) ✓"
+} else {
+  Write-Host "  /!\ AutoHotkey indisponible : le Ctrl+V global ne marchera pas."
+  Write-Host "      Mais le BOUTON du panneau dans Premiere fonctionne quand meme."
 }
 
 Write-Host ""
