@@ -13,7 +13,9 @@ Expand-Archive -Path $zip -DestinationPath $tmp -Force
 $src = Join-Path $tmp "Colle moi l'web"
 
 # 1. Panneau CEP
-$ext = Join-Path $env:APPDATA "Adobe\CEP\extensions\PasteFromWeb"
+$extDir = Join-Path $env:APPDATA "Adobe\CEP\extensions"
+New-Item -ItemType Directory -Path $extDir -Force | Out-Null   # cree les dossiers parents si absents
+$ext = Join-Path $extDir "PasteFromWeb"
 if (Test-Path $ext) { Remove-Item $ext -Recurse -Force }
 Copy-Item (Join-Path $src "PasteFromWeb") $ext -Recurse -Force
 Write-Host "  - Panneau installe"
@@ -39,10 +41,21 @@ if (Test-Path $exe) {
 } elseif (Test-Path $ahk) {
   Copy-Item $ahk $hd -Force
   Copy-Item (Join-Path $hd "ColleMoiWebHelper.ahk") $startup -Force
-  try { Start-Process (Join-Path $hd "ColleMoiWebHelper.ahk") } catch {}
-  Write-Host "  - Helper .ahk installe (necessite AutoHotkey v2)"
+  # AutoHotkey v2 est-il installe ? (necessaire pour lancer le .ahk)
+  $ahkInstalled = $false
+  try { if (Get-Command AutoHotkey* -ErrorAction SilentlyContinue) { $ahkInstalled = $true } } catch {}
+  if (-not $ahkInstalled -and (Test-Path "$env:ProgramFiles\AutoHotkey")) { $ahkInstalled = $true }
+  if ($ahkInstalled) {
+    try { Start-Process (Join-Path $hd "ColleMoiWebHelper.ahk"); Write-Host "  - Helper lance ✓" } catch { Write-Host "  - Helper copie (lancement auto echoue, demarrera a la prochaine session)" }
+  } else {
+    Write-Host ""
+    Write-Host "  /!\ Le raccourci Ctrl+V necessite AutoHotkey v2 (gratuit)."
+    Write-Host "      Installe-le ici :  https://www.autohotkey.com/  (choisir la v2)"
+    Write-Host "      Puis relance ce script, ou ouvre :  $hd\ColleMoiWebHelper.ahk"
+    Write-Host "      (Le bouton du panneau dans Premiere fonctionne deja sans ca.)"
+  }
 }
 
 Write-Host ""
 Write-Host "Termine ! (Re)lance Premiere -> Fenetre > Extensions > Colle moi l'web"
-Write-Host "Copie une image, puis Ctrl+V dans la timeline."
+Write-Host "Copie une image, puis Ctrl+V dans la timeline (ou clique le bouton du panneau)."
